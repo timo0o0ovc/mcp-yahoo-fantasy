@@ -15,11 +15,33 @@ then to an interactive prompt.
 
 import argparse
 import getpass
+import json
 import os
 
 from yahoo_oauth import OAuth2
 
 from .auth import ENV_FILE, load_env_file, write_env
+
+
+class _VerboseOAuth2(OAuth2):
+    """OAuth2 that reports Yahoo's error instead of a bare KeyError when the code exchange
+    is rejected (bad/expired/reused code, wrong secret, redirect URI mismatch)."""
+
+    def oauth2_access_parser(self, raw_access):
+        try:
+            body = json.loads(raw_access.content.decode("utf-8"))
+        except ValueError:
+            body = {}
+        if "access_token" not in body:
+            raise SystemExit(
+                f"Yahoo rejected the login (HTTP {raw_access.status_code}): "
+                f"{body.get('error', 'unknown error')} - "
+                f"{body.get('error_description', 'no description')}\n"
+                "Common causes: the verifier code was mistyped, expired or already used "
+                "(get a new one by re-running yahoo-login); wrong Client ID/Secret; or the "
+                "app's redirect URI doesn't match."
+            )
+        return super().oauth2_access_parser(raw_access)
 
 
 def main():
@@ -47,7 +69,7 @@ def main():
     # OAuth2 constructor runs the whole exchange; store_file=False stops it writing its own
     # secrets.json -- we persist to .env instead.
     print("Open this URL, approve access, then paste the verifier code Yahoo shows you.\n")
-    oauth = OAuth2(client_id, client_secret, browser_callback=False, store_file=False)
+    oauth = _VerboseOAuth2(client_id, client_secret, browser_callback=False, store_file=False)
 
     write_env(
         {
