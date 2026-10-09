@@ -47,11 +47,20 @@ def load_env_file():
             os.environ.setdefault(key, value)
 
 
+def _write_private(path, text):
+    """Write `text` to `path` readable only by the current user (mode 600)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.chmod(path, 0o600)  # also tightens a pre-existing, looser file
+
+
 def write_env(values):
     """Merge `values` into `.env`, preserving any unrelated keys already there."""
     entries = _parse_env(ENV_FILE.read_text()) if ENV_FILE.is_file() else {}
     entries.update(values)
-    ENV_FILE.write_text("".join(f"{k}={v}\n" for k, v in entries.items()))
+    _write_private(ENV_FILE, "".join(f"{k}={v}\n" for k, v in entries.items()))
 
 
 def _bridge_env_to_oauth_file():
@@ -75,8 +84,7 @@ def _bridge_env_to_oauth_file():
         payload["access_token"] = os.environ["YAHOO_ACCESS_TOKEN"]
     if os.environ.get("YAHOO_REFRESH_TOKEN"):
         payload["refresh_token"] = os.environ["YAHOO_REFRESH_TOKEN"]
-    OAUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OAUTH_FILE.write_text(json.dumps(payload))
+    _write_private(OAUTH_FILE, json.dumps(payload))
     return True
 
 

@@ -17,8 +17,8 @@ and writes as MCP tools, for NBA leagues only (Yahoo game code `nba`).
 ## Setup
 
 1. **Register a Yahoo app** at <https://developer.yahoo.com/apps/create/>.
-   - Set the application to **Confidential Client** with **Fantasy Sports: Read/Write**
-     permission.
+   - Set the application to **Confidential Client** with **Fantasy Sports: Read**
+     permission (this fork never writes).
    - Set the redirect URI to `https://localhost:8000`.
    - Note the **Client ID** (consumer key) and **Client Secret** (consumer secret).
 
@@ -41,6 +41,20 @@ and writes as MCP tools, for NBA leagues only (Yahoo game code `nba`).
 
    On first use the server reads `.env` and writes a refreshed
    `~/.config/yahoo-fantasy-mcp/oauth2.json`; subsequent runs reuse and auto-refresh it.
+
+### Keeping credentials local and private
+
+Keep the credentials in a file outside the repo, readable only by you:
+
+```bash
+mkdir -p ~/.config/yahoo-fantasy-mcp
+export YAHOO_ENV_FILE=~/.config/yahoo-fantasy-mcp/.env
+uv run yahoo-login        # writes the file (mode 600)
+```
+
+Set the same `YAHOO_ENV_FILE` in your MCP client's `env` block so the server finds it.
+`yahoo-login` and the server create both `.env` and `oauth2.json` with mode 600. Never
+commit them or paste them into a chat or a cloud session.
 
 ## Configuration (environment variables)
 
