@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "mcp>=1.4.0",
+    "mcp>=1.4.0,<2",
     "nba-api>=1.11.4",
     "numpy>=2.5.3",
     "yahoo-fantasy-api>=2.9.0",
