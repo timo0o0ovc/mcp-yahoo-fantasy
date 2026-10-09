@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Overview
 
 A single MCP (Model Context Protocol) server, in [`yahoo/`](yahoo/), that wraps the Yahoo
-Fantasy Sports API for read and write access across NFL/NHL/NBA/MLB. It is a `uv`-managed
+Fantasy Sports API for STRICTLY READ-ONLY access across NFL/NHL/NBA/MLB, plus an NBA 9-cat
+H2H `analytics/` package. It is a `uv`-managed
 Python 3.12 package. (The repo previously held an NHL server too; that has been removed and
 the project is now Yahoo-only.)
 
@@ -26,16 +27,24 @@ Run from the repo root unless noted.
 Environment note: `uv lock`/`uv sync` need network; in a sandboxed shell run them with the
 sandbox disabled. Redirecting command output to `/tmp` also fails under the sandbox.
 
-There is no automated test suite. Live behavior can only be exercised with real Yahoo
-credentials (a `.env` written by `yahoo-login`); without them the server starts and lists
-tools but tool calls raise a credentials error.
+Tests: `cd yahoo && uv run pytest` (fixtures/stubs, no credentials or network).
+`tests/test_read_only.py` is the read-only gate: never weaken it. A new tool must be a read,
+registered with `@read_tool()`, and added to its `EXPECTED_TOOLS` allowlist. Live behavior
+still needs real Yahoo credentials and network access to stats.nba.com.
 
 ## Architecture
 
-Built on `FastMCP` (`mcp.server.fastmcp`). Three modules under `src/yahoo/`, each a deep
+Built on `FastMCP` (`mcp.server.fastmcp`). Modules under `src/yahoo/`, each a deep
 layer hiding one concern:
 
-- `server.py` — the `FastMCP("yahoo")` instance and ~29 `@mcp.tool()` functions. Tools are
+- `readonly.py` — read-only enforcement: `ReadOnlyTeam`/`ReadOnlyLeague` proxies, the
+  `lock_yhandler()` patch that disables Yahoo PUT/POST, and the known write-tool names.
+- `analytics/` — pure functions (`sim_matchup`, `player_projection`, `games_this_week`,
+  `recommend_moves`, `roles.check_role`) plus `nba_data.py` (nba_api fetchers) and
+  `service.py` (wires Yahoo + NBA data for the tools). Projections use only the current
+  season's last 14/30 days; roles need sources dated within 14 days or are labelled
+  "role unverified". Never add a fallback to last season's data.
+- `server.py` — the `FastMCP("yahoo")` instance and 25 `@read_tool()` functions. Tools are
   intentionally thin: resolve args, call one `client` method, return the result. They return
   `yahoo_fantasy_api`'s plain dicts/lists, which FastMCP serializes to JSON for the model.
   Each tool's docstring IS its description shown to the model, so keep them accurate.
@@ -58,24 +67,18 @@ layer hiding one concern:
 
 ### Time frames: week vs. date
 
-`set_lineup`, `team_roster`, and `player_stats` accept either a `week` (int) or a `date`
+`team_roster` and `player_stats` accept either a `week` (int) or a `date`
 (`YYYY-MM-DD`) — never assume one. NFL is weekly, so it uses `week`; the daily sports
-(NHL/NBA/MLB) use `date`. `server.py:_time_frame` centralizes this; `set_lineup` raises if
-neither is given.
+(NHL/NBA/MLB) use `date`.
 
 ### Key design decisions (and why)
 
-- **Library choice**: `yahoo_fantasy_api` is the only Yahoo library that supports writes
-  (lineup, add/drop, waivers, trades), and it returns JSON-ready dicts — ideal for MCP
-  output. Auth (login + refresh) goes through `yahoo_oauth` directly. The repo used to
+- **Read-only fork**: all write tools were removed from upstream. Do not re-add them.
+- **Library choice**: `yahoo_fantasy_api` returns JSON-ready dicts — ideal for MCP output. Auth (login + refresh) goes through `yahoo_oauth` directly. The repo used to
   depend on `yahoofantasy` for login, but its `login` CLI calls `ssl.wrap_socket`, removed
   in Python 3.12, so it crashes — `yahoo-login` replaces it and that dependency is dropped.
 - **Lazy auth**: the OAuth session is built on first tool call, not at import, so the server
   starts (and lists tools) without credentials. Don't move auth into module import.
-- **`propose_trade` is omitted on purpose**: `yahoo_fantasy_api`'s implementation is broken
-  upstream (its `players` arg is passed into the wrong helper slot). `accept_trade` /
-  `reject_trade` work. Don't add a `propose_trade` tool without first verifying the library
-  fixed it.
 
 ### Yahoo key formats
 

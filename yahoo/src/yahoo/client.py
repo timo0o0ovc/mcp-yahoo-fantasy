@@ -16,6 +16,10 @@ import os
 import yahoo_fantasy_api as yfa
 
 from . import auth
+from .readonly import ReadOnlyLeague, ReadOnlyTeam, lock_yhandler
+
+# Strictly read-only fork: disable yahoo_fantasy_api's HTTP write paths process-wide.
+lock_yhandler()
 
 
 class YahooClient:
@@ -43,7 +47,7 @@ class YahooClient:
                 "Use list_leagues to find your league key."
             )
         if key not in self._leagues:
-            self._leagues[key] = yfa.League(self.sc, key)
+            self._leagues[key] = ReadOnlyLeague(yfa.League(self.sc, key))
         return self._leagues[key]
 
     def team_key(self, team_key=None, league_key=None):
@@ -51,7 +55,7 @@ class YahooClient:
         return team_key or self.league(league_key).team_key()
 
     def team(self, team_key=None, league_key=None):
-        return yfa.Team(self.sc, self.team_key(team_key, league_key))
+        return ReadOnlyTeam(yfa.Team(self.sc, self.team_key(team_key, league_key)))
 
 
 client = YahooClient()

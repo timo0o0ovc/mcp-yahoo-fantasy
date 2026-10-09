@@ -1,11 +1,15 @@
 """
 Yahoo Fantasy Sports MCP server.
 
+STRICTLY READ-ONLY FORK. No tool here changes anything in Yahoo: there are no lineup,
+add/drop, waiver or trade tools, every tool is annotated readOnlyHint=True, and
+readonly.py blocks yahoo_fantasy_api's write paths. tests/test_read_only.py enforces it.
+
 Tools wrap yahoo_fantasy_api and return its plain dicts/lists (JSON-ready) directly.
-Reads cover leagues, teams, rosters, matchups, players, stats, drafts, and transactions;
-writes cover lineup changes, add/drop, waiver claims, and trade accept/reject. Works
-across NFL/NHL/NBA/MLB -- the sport is implied by the league key, except list_leagues
-which takes a game_code.
+Reads cover leagues, teams, rosters, matchups, players, stats, drafts, and transactions.
+Analytics tools (NBA 9-cat H2H) add schedule counts, recent-form projections, a Monte
+Carlo matchup simulator and ranked move memos. Works across NFL/NHL/NBA/MLB for the
+Yahoo reads -- the sport is implied by the league key, except list_leagues.
 
 League/team keys are optional on most tools; see client.py for the defaulting rules.
 """
@@ -13,25 +17,26 @@ League/team keys are optional on most tools; see client.py for the defaulting ru
 import datetime as dt
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .client import client
 
 mcp = FastMCP("yahoo")
 
+READ_ONLY = ToolAnnotations(
+    readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True
+)
 
-def _time_frame(week, date):
-    """Yahoo lineup/stat windows: a week number (NFL) or a calendar date (daily sports)."""
-    if week is not None:
-        return int(week)
-    if date:
-        return dt.date.fromisoformat(date)
-    return None
+
+def read_tool():
+    """The only way tools are registered in this fork: always annotated read-only."""
+    return mcp.tool(annotations=READ_ONLY)
 
 
 # --- League reads -----------------------------------------------------------------
 
 
-@mcp.tool()
+@read_tool()
 def list_leagues(game_code: str, year: int | None = None) -> dict:
     """List the authenticated user's league keys for a sport.
 
@@ -47,37 +52,37 @@ def list_leagues(game_code: str, year: int | None = None) -> dict:
     }
 
 
-@mcp.tool()
+@read_tool()
 def league_settings(league_key: str | None = None) -> dict:
     """League settings: scoring type, roster size, current/start/end week, FAAB, etc."""
     return client.league(league_key).settings()
 
 
-@mcp.tool()
+@read_tool()
 def league_standings(league_key: str | None = None) -> list:
     """League standings, ordered first place to last, with records and games back."""
     return client.league(league_key).standings()
 
 
-@mcp.tool()
+@read_tool()
 def league_teams(league_key: str | None = None) -> dict:
     """All teams in the league, keyed by team key, with managers and metadata."""
     return client.league(league_key).teams()
 
 
-@mcp.tool()
+@read_tool()
 def league_matchups(week: int | None = None, league_key: str | None = None) -> dict:
     """Raw scoreboard/matchup data for a week (defaults to the current week)."""
     return client.league(league_key).matchups(week)
 
 
-@mcp.tool()
+@read_tool()
 def league_draft_results(league_key: str | None = None) -> list:
     """Draft results: pick, round, team key, player id (and cost for auction leagues)."""
     return client.league(league_key).draft_results()
 
 
-@mcp.tool()
+@read_tool()
 def league_transactions(
     tran_types: str = "add,drop,trade",
     count: int = 25,
@@ -87,19 +92,19 @@ def league_transactions(
     return client.league(league_key).transactions(tran_types, str(count))
 
 
-@mcp.tool()
+@read_tool()
 def league_stat_categories(league_key: str | None = None) -> list:
     """The league's scoring stat categories (display name + position type)."""
     return client.league(league_key).stat_categories()
 
 
-@mcp.tool()
+@read_tool()
 def league_roster_positions(league_key: str | None = None) -> dict:
     """Roster position slots and counts (e.g. C, RW, BN, IR)."""
     return client.league(league_key).positions()
 
 
-@mcp.tool()
+@read_tool()
 def current_week(league_key: str | None = None) -> dict:
     """The league's current and final week numbers."""
     league = client.league(league_key)
@@ -109,32 +114,32 @@ def current_week(league_key: str | None = None) -> dict:
 # --- Player reads -----------------------------------------------------------------
 
 
-@mcp.tool()
+@read_tool()
 def free_agents(position: str, league_key: str | None = None) -> list:
     """Available free agents at a position (e.g. "C", "RW", "QB", or "B"/"P" for type)."""
     return client.league(league_key).free_agents(position)
 
 
-@mcp.tool()
+@read_tool()
 def waivers(position: str | None = None, league_key: str | None = None) -> list:
     """Players currently on waivers, optionally filtered by position."""
     return client.league(league_key).waivers(position)
 
 
-@mcp.tool()
+@read_tool()
 def taken_players(league_key: str | None = None) -> list:
     """All players currently rostered by some team in the league."""
     return client.league(league_key).taken_players()
 
 
-@mcp.tool()
+@read_tool()
 def player_details(player: str, league_key: str | None = None) -> list:
     """Look up players by name (search) or by numeric player id."""
     query = int(player) if player.isdigit() else player
     return client.league(league_key).player_details(query)
 
 
-@mcp.tool()
+@read_tool()
 def player_stats(
     player_ids: list[int],
     req_type: str = "season",
@@ -152,7 +157,7 @@ def player_stats(
     )
 
 
-@mcp.tool()
+@read_tool()
 def percent_owned(player_ids: list[int], league_key: str | None = None) -> list:
     """Ownership percentage across the Yahoo player pool for the given player ids."""
     return client.league(league_key).percent_owned(player_ids)
@@ -161,19 +166,19 @@ def percent_owned(player_ids: list[int], league_key: str | None = None) -> list:
 # --- Team reads -------------------------------------------------------------------
 
 
-@mcp.tool()
+@read_tool()
 def my_team_key(league_key: str | None = None) -> str:
     """The authenticated user's own team key in the league."""
     return client.team_key(None, league_key)
 
 
-@mcp.tool()
+@read_tool()
 def team_details(team_key: str | None = None, league_key: str | None = None) -> dict:
     """Team metadata. Defaults to the authenticated user's team."""
     return client.team(team_key, league_key).details()
 
 
-@mcp.tool()
+@read_tool()
 def team_roster(
     week: int | None = None,
     date: str | None = None,
@@ -187,7 +192,7 @@ def team_roster(
     return client.team(team_key, league_key).roster(week=week, day=parsed_date)
 
 
-@mcp.tool()
+@read_tool()
 def team_matchup_opponent(
     week: int, team_key: str | None = None, league_key: str | None = None
 ) -> str:
@@ -195,114 +200,108 @@ def team_matchup_opponent(
     return client.team(team_key, league_key).matchup(week)
 
 
-@mcp.tool()
+@read_tool()
 def proposed_trades(team_key: str | None = None, league_key: str | None = None) -> list:
     """Pending trade proposals involving a team, with their transaction keys."""
     return client.team(team_key, league_key).proposed_trades()
 
 
-# --- Writes -----------------------------------------------------------------------
+# --- Analytics (NBA 9-cat H2H; read-only) ------------------------------------------
 
-
-@mcp.tool()
-def set_lineup(
-    lineup: list[dict],
+@read_tool()
+def games_this_week(
     week: int | None = None,
-    date: str | None = None,
-    team_key: str | None = None,
+    from_date: str | None = None,
+    teams: list[str] | None = None,
     league_key: str | None = None,
 ) -> dict:
-    """Set a team's starting lineup. lineup is a list of {player_id, selected_position}
-    (e.g. [{"player_id": 5981, "selected_position": "BN"}]). Provide week (NFL) or date
-    (YYYY-MM-DD, daily sports). Defaults to the authenticated user's team.
+    """Games per NBA team in a Yahoo scoring week (official NBA schedule; regular-season
+    games only). Returns totals, games remaining from from_date (default: today, US
+    Eastern), the 4+ game teams, and games per day. teams filters by tricode (e.g. "OKC").
     """
-    time_frame = _time_frame(week, date)
-    if time_frame is None:
-        raise ValueError("Provide either week (NFL) or date (YYYY-MM-DD).")
-    modified = [
-        {"player_id": int(p["player_id"]), "selected_position": p["selected_position"]}
-        for p in lineup
-    ]
-    client.team(team_key, league_key).change_positions(time_frame, modified)
-    return {"status": "ok", "changed": len(modified)}
+    from .analytics.service import games_this_week_live
+
+    return games_this_week_live(client, week, league_key, from_date, teams)
 
 
-@mcp.tool()
-def add_player(
-    player_id: int, team_key: str | None = None, league_key: str | None = None
+@read_tool()
+def player_projection(
+    player: str,
+    as_of: str | None = None,
+    yahoo_status: str | None = None,
+    extra_evidence: list[dict] | None = None,
 ) -> dict:
-    """Add a free agent to a team. Defaults to the authenticated user's team."""
-    client.team(team_key, league_key).add_player(player_id)
-    return {"status": "ok", "added": player_id}
+    """Per-game projection for an NBA player from the last 14- and 30-day windows of the
+    CURRENT season (nba_api game logs). Never uses last season. Includes a role check:
+    team, minutes and injury must each have a source dated within 14 days, otherwise the
+    role is labelled "role unverified". If no recent games exist, no projection is given.
+    extra_evidence: optional dated facts from news/depth charts, each {"player", "what"
+    ("team"|"role"|"minutes"|"injury"|"projected_minutes"), "value", "source", "date"
+    (YYYY-MM-DD)}. Only items dated within 14 days count. Also accepted by sim_matchup
+    and recommend_moves.
+    """
+    from .analytics.service import project_named, us_today
+
+    proj, _ = project_named(player, as_of or us_today(), yahoo_status, extra_evidence)
+    return proj
 
 
-@mcp.tool()
-def drop_player(
-    player_id: int, team_key: str | None = None, league_key: str | None = None
-) -> dict:
-    """Drop a player from a team. Defaults to the authenticated user's team."""
-    client.team(team_key, league_key).drop_player(player_id)
-    return {"status": "ok", "dropped": player_id}
 
-
-@mcp.tool()
-def add_and_drop_players(
-    add_player_id: int,
-    drop_player_id: int,
+@read_tool()
+def sim_matchup(
+    week: int | None = None,
+    opponent_team_key: str | None = None,
     team_key: str | None = None,
+    from_date: str | None = None,
+    n_sims: int = 10000,
+    extra_evidence: list[dict] | None = None,
+    manual_lines: dict | None = None,
+    availability: dict | None = None,
     league_key: str | None = None,
 ) -> dict:
-    """Add one player and drop another in a single transaction."""
-    client.team(team_key, league_key).add_and_drop_players(add_player_id, drop_player_id)
-    return {"status": "ok", "added": add_player_id, "dropped": drop_player_id}
+    """Monte Carlo (default 10,000 runs) of a 9-cat H2H week: FG%, FT%, 3PM, PTS, REB,
+    AST, STL, BLK, TO (lower wins). FG%/FT% come from simulated makes and attempts.
+    Uses verified rosters, the official schedule from from_date (default today, US
+    Eastern), daily active-slot limits and week-to-date Yahoo totals. Returns win/tie/loss
+    probability, expected category wins, per-category win rates, assumptions and sources.
+    manual_lines: {player name: {per-game stats..., "source", "date"}} for players with no
+    recent games (e.g. rookies); labelled as assumptions. availability: {name: 0..1}
+    overrides per-game play probability (load management).
+    """
+    from .analytics.service import sim_matchup_live
 
-
-@mcp.tool()
-def claim_player(
-    player_id: int,
-    faab: int | None = None,
-    team_key: str | None = None,
-    league_key: str | None = None,
-) -> dict:
-    """Claim a player off waivers, optionally with a FAAB bid (dollars)."""
-    client.team(team_key, league_key).claim_player(player_id, faab=faab)
-    return {"status": "ok", "claimed": player_id, "faab": faab}
-
-
-@mcp.tool()
-def claim_and_drop_players(
-    add_player_id: int,
-    drop_player_id: int,
-    faab: int | None = None,
-    team_key: str | None = None,
-    league_key: str | None = None,
-) -> dict:
-    """Claim a waiver player and drop another in one transaction, optional FAAB bid."""
-    client.team(team_key, league_key).claim_and_drop_players(
-        add_player_id, drop_player_id, faab=faab
+    return sim_matchup_live(
+        client, week, league_key, team_key, opponent_team_key, from_date, n_sims,
+        extra_evidence, manual_lines, availability,
     )
-    return {"status": "ok", "added": add_player_id, "dropped": drop_player_id, "faab": faab}
 
 
-@mcp.tool()
-def accept_trade(
-    transaction_key: str,
-    trade_note: str = "",
+@read_tool()
+def recommend_moves(
+    week: int | None = None,
+    positions: list[str] | None = None,
+    max_candidates: int = 12,
+    candidate_names: list[str] | None = None,
+    protect: list[str] | None = None,
+    from_date: str | None = None,
+    n_sims: int = 10000,
+    extra_evidence: list[dict] | None = None,
+    manual_lines: dict | None = None,
+    availability: dict | None = None,
     team_key: str | None = None,
     league_key: str | None = None,
 ) -> dict:
-    """Accept a pending trade by its transaction key (see proposed_trades)."""
-    client.team(team_key, league_key).accept_trade(transaction_key, trade_note)
-    return {"status": "ok", "accepted": transaction_key}
+    """Ranked add/drop decision memos for this week's matchup. Recommends only; it never
+    makes a move. Each memo: action, change in matchup-win probability, change in expected
+    category wins, per-category win rates before/after, assumptions, role/injury source
+    dates for both players, and confidence (high/medium/low). Any player whose role is not
+    verified within 14 days is flagged "role unverified" and the memo is low confidence.
+    protect: player names never to drop. candidate_names limits the free agents tried.
+    """
+    from .analytics.service import DEFAULT_POSITIONS, recommend_moves_live
 
-
-@mcp.tool()
-def reject_trade(
-    transaction_key: str,
-    trade_note: str = "",
-    team_key: str | None = None,
-    league_key: str | None = None,
-) -> dict:
-    """Reject a pending trade by its transaction key (see proposed_trades)."""
-    client.team(team_key, league_key).reject_trade(transaction_key, trade_note)
-    return {"status": "ok", "rejected": transaction_key}
+    return recommend_moves_live(
+        client, week, league_key, team_key, from_date, tuple(positions or DEFAULT_POSITIONS),
+        max_candidates, candidate_names, tuple(protect or ()), n_sims, extra_evidence,
+        manual_lines, availability,
+    )

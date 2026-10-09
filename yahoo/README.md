@@ -88,11 +88,78 @@ Player reads: `free_agents`, `waivers`, `taken_players`, `player_details`, `play
 Team reads: `my_team_key`, `team_details`, `team_roster`, `team_matchup_opponent`,
 `proposed_trades`.
 
-Writes: `set_lineup`, `add_player`, `drop_player`, `add_and_drop_players`, `claim_player`,
-`claim_and_drop_players`, `accept_trade`, `reject_trade`.
+Analytics (NBA 9-cat H2H): `games_this_week`, `player_projection`, `sim_matchup`,
+`recommend_moves` -- see below.
 
 Most tools accept an optional `league_key`/`team_key`; without them they fall back to
 `YAHOO_LEAGUE_KEY` and to your own team in that league.
+
+## Read-only fork
+
+This fork exposes **no write tools**. Lineup changes, add/drop, waiver claims and trade
+accept/reject were removed. Three layers enforce it:
+
+1. `server.py` registers tools only through `read_tool()`, which sets
+   `readOnlyHint=True, destructiveHint=False` on every tool.
+2. `client.py` hands tools `ReadOnlyTeam` / `ReadOnlyLeague` proxies that raise
+   `ReadOnlyViolation` on any mutating `yahoo_fantasy_api` method.
+3. `readonly.lock_yhandler()` disables `YHandler.put/post` (and their helpers) process-wide.
+
+`tests/test_read_only.py` fails if any write tool is registered, if a tool name reads like a
+write, if a tool lacks the read-only annotation, if any source file calls a Yahoo write
+method, or if the tool set differs from the reviewed allowlist. You can also set the Yahoo
+app permission to **Fantasy Sports: Read** for a fourth, server-side layer.
+
+## Analytics (`src/yahoo/analytics/`)
+
+Built for a Yahoo 9-category head-to-head NBA league: FG%, FT%, 3PM, PTS, REB, AST, STL,
+BLK, TO (lower wins). Live data comes from `nba_api` (stats.nba.com) and Yahoo.
+
+| Tool | What it returns |
+| --- | --- |
+| `games_this_week` | Regular-season games per NBA team in a Yahoo week (official schedule), remaining games from a date, 4+ game teams, games per day. Preseason, All-Star and NBA Cup final ids are excluded. |
+| `player_projection` | Per-game line from the last **14- and 30-day** windows of the **current season** (60/40 blend). Rows from other seasons or older than 30 days are discarded. Includes a dated role check. |
+| `sim_matchup` | 10,000-run Monte Carlo of the week: win/tie/loss probability, expected category wins, per-category win rates, assumptions and sources. Uses rosters, schedule from today (US Eastern), daily active slots and Yahoo week-to-date totals. |
+| `recommend_moves` | Ranked decision memos for add/drop moves. Recommends only; never executes. |
+
+### Role verification
+
+A player's role is `verified` only if team, role/minutes and injury status each have a
+source dated within **14 days** (recent game logs, today's Yahoo status, today's NBA player
+directory, or dated `extra_evidence` you pass from news). Otherwise it is labelled
+exactly **`role unverified`**, with the failing reasons. Last season's role is never used:
+a player with no current-season games in 30 days gets no projection unless you pass a
+`manual_lines` entry, which is labelled as an assumption and still `role unverified`.
+
+### Simulation model
+
+- Per game: a shared minutes factor (Gamma, mean 1) drives FGA, 3PA share, FTA and
+  Poisson REB/AST/STL/BLK/TOV. Makes are Binomial on attempts, and PTS =
+  2*2PM + 3*3PM + FTM, so points, threes and percentages stay consistent.
+- Shooting % per simulation: Beta posterior of the recent sample shrunk to league priors.
+- Team FG%/FT% = summed makes / summed attempts, compared at 3 decimals.
+- Availability by Yahoo status: healthy 0.93, GTD/DTD 0.55, O/INJ/NA 0 (override with
+  `availability`). IL-slot players are excluded.
+- Daily slot cap fills the highest-value players who play; positional eligibility is
+  ignored (slightly optimistic for both sides).
+- Moves use common random numbers, so deltas isolate the move.
+
+### Decision memo fields
+
+`action`, `delta_win_prob` (+ std error), `delta_expected_category_wins`,
+`per_category_win_rates` (before/after/delta for all 9), `assumptions`,
+`role_and_injury_sources` (role status, team, 14-day minutes, injury status and every
+source with its date and age for both players), `role_flag`, `confidence`
+(`high`/`medium`/`low`) and `confidence_reasons`. Confidence is `low` whenever a role is
+unverified, the sample is under 3 games, or the effect is within 2 standard errors.
+
+### Tests
+
+```bash
+uv run pytest
+```
+
+Tests use fixtures and stubs; no Yahoo credentials or network needed.
 
 > Note: proposing trades is intentionally omitted -- `yahoo_fantasy_api`'s `propose_trade`
 > is broken upstream (its argument handling is inconsistent with its own helper). Accepting
