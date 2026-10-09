@@ -27,6 +27,14 @@ class _VerboseOAuth2(OAuth2):
     """OAuth2 that reports Yahoo's error instead of a bare KeyError when the code exchange
     is rejected (bad/expired/reused code, wrong secret, redirect URI mismatch)."""
 
+    def handler(self):
+        """Run the normal flow, adding `scope=<self.scope>` to the authorize URL if set."""
+        scope = vars(self).get("scope")
+        if scope:
+            original = self.oauth.get_authorize_url
+            self.oauth.get_authorize_url = lambda **params: original(scope=scope, **params)
+        return super().handler()
+
     def oauth2_access_parser(self, raw_access):
         try:
             body = json.loads(raw_access.content.decode("utf-8"))
@@ -50,6 +58,11 @@ def main():
     )
     parser.add_argument("--client-id", help="Yahoo app Client ID (Consumer Key).")
     parser.add_argument("--client-secret", help="Yahoo app Client Secret (Consumer Secret).")
+    parser.add_argument(
+        "--scope",
+        help="Optional OAuth scope to add to the authorize URL (e.g. fspt-r). Normally "
+        "unneeded: Yahoo ties Fantasy access to the app's settings.",
+    )
     args = parser.parse_args()
 
     load_env_file()
@@ -69,7 +82,9 @@ def main():
     # OAuth2 constructor runs the whole exchange; store_file=False stops it writing its own
     # secrets.json -- we persist to .env instead.
     print("Open this URL, approve access, then paste the verifier code Yahoo shows you.\n")
-    oauth = _VerboseOAuth2(client_id, client_secret, browser_callback=False, store_file=False)
+    oauth = _VerboseOAuth2(
+        client_id, client_secret, browser_callback=False, store_file=False, scope=args.scope
+    )
 
     write_env(
         {
