@@ -21,6 +21,9 @@ from .readonly import ReadOnlyLeague, ReadOnlyTeam, lock_yhandler
 # Strictly read-only fork: disable yahoo_fantasy_api's HTTP write paths process-wide.
 lock_yhandler()
 
+# NBA-only fork: the only Yahoo game code this client will build.
+NBA_GAME_CODE = "nba"
+
 
 class YahooClient:
     def __init__(self):
@@ -34,7 +37,9 @@ class YahooClient:
             self._sc = auth.session()
         return self._sc
 
-    def game(self, game_code):
+    def game(self, game_code=NBA_GAME_CODE):
+        if game_code != NBA_GAME_CODE:
+            raise ValueError(f"This server is NBA-only; got game_code={game_code!r}.")
         if game_code not in self._games:
             self._games[game_code] = yfa.Game(self.sc, game_code)
         return self._games[game_code]

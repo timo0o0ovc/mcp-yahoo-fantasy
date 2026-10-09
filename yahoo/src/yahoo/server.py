@@ -8,8 +8,8 @@ readonly.py blocks yahoo_fantasy_api's write paths. tests/test_read_only.py enfo
 Tools wrap yahoo_fantasy_api and return its plain dicts/lists (JSON-ready) directly.
 Reads cover leagues, teams, rosters, matchups, players, stats, drafts, and transactions.
 Analytics tools (NBA 9-cat H2H) add schedule counts, recent-form projections, a Monte
-Carlo matchup simulator and ranked move memos. Works across NFL/NHL/NBA/MLB for the
-Yahoo reads -- the sport is implied by the league key, except list_leagues.
+Carlo matchup simulator and ranked move memos. NBA-only: list_leagues returns NBA leagues
+only and the client only builds the Yahoo `nba` game. Pass NBA league keys.
 
 League/team keys are optional on most tools; see client.py for the defaulting rules.
 """
@@ -19,7 +19,7 @@ import datetime as dt
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from .client import client
+from .client import NBA_GAME_CODE, client
 
 mcp = FastMCP("yahoo")
 
@@ -37,18 +37,18 @@ def read_tool():
 
 
 @read_tool()
-def list_leagues(game_code: str, year: int | None = None) -> dict:
-    """List the authenticated user's league keys for a sport.
+def list_leagues(year: int | None = None) -> dict:
+    """List the authenticated user's NBA league keys (this server is NBA-only).
 
-    game_code is one of nfl, nhl, nba, mlb. year filters to a season (e.g. 2024).
-    Returns the game id and the league keys (e.g. "449.l.365083") to pass to other tools.
+    year filters to a season (e.g. 2025). Returns the game id and the league keys
+    (e.g. "466.l.12345") to pass to other tools.
     """
-    game = client.game(game_code)
-    # game_codes filters to this sport; without it Yahoo returns every game's leagues.
+    game = client.game()
+    # game_codes filters to NBA; without it Yahoo returns every game's leagues.
     return {
-        "game_code": game_code,
+        "game_code": NBA_GAME_CODE,
         "game_id": game.game_id(),
-        "league_keys": game.league_ids(year=year, game_codes=[game_code]),
+        "league_keys": game.league_ids(year=year, game_codes=[NBA_GAME_CODE]),
     }
 
 
@@ -149,7 +149,7 @@ def player_stats(
     league_key: str | None = None,
 ) -> list:
     """Stats for players. req_type is one of season, average_season, lastweek, lastmonth,
-    date, week. Pass week (NFL), date (YYYY-MM-DD), or season as required by req_type.
+    date, week. Pass date (YYYY-MM-DD), week, or season as required by req_type.
     """
     parsed_date = dt.date.fromisoformat(date) if date else None
     return client.league(league_key).player_stats(

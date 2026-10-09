@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Overview
 
 A single MCP (Model Context Protocol) server, in [`yahoo/`](yahoo/), that wraps the Yahoo
-Fantasy Sports API for STRICTLY READ-ONLY access across NFL/NHL/NBA/MLB, plus an NBA 9-cat
+Fantasy Sports API for STRICTLY READ-ONLY access, NBA-only (Yahoo game code `nba`), plus an NBA 9-cat
 H2H `analytics/` package. It is a `uv`-managed
 Python 3.12 package. (The repo previously held an NHL server too; that has been removed and
 the project is now Yahoo-only.)
@@ -68,8 +68,7 @@ layer hiding one concern:
 ### Time frames: week vs. date
 
 `team_roster` and `player_stats` accept either a `week` (int) or a `date`
-(`YYYY-MM-DD`) — never assume one. NFL is weekly, so it uses `week`; the daily sports
-(NHL/NBA/MLB) use `date`.
+(`YYYY-MM-DD`) — never assume one. NBA is a daily sport, so prefer `date`.
 
 ### Key design decisions (and why)
 
@@ -84,8 +83,8 @@ layer hiding one concern:
 
 - League key: `449.l.365083` (leading number is the game/season id).
 - Team key: `449.l.365083.t.5`.
-Tools take these as `league_key` / `team_key`; `list_leagues` discovers league keys for a
-sport (`game_code` of nfl/nhl/nba/mlb).
+Tools take these as `league_key` / `team_key`; `list_leagues` discovers NBA league keys
+(it takes no `game_code`; the client only builds the `nba` game).
 
 ## Security
 

@@ -2,7 +2,7 @@
 
 An MCP (Model Context Protocol) server that wraps the
 [Yahoo Fantasy Sports API](https://sports.yahoo.com/developer/), giving an LLM strictly read-only
-access to your fantasy leagues across NFL, NHL, NBA, and MLB: standings, rosters,
+access to your fantasy leagues for NBA only: standings, rosters,
 matchups, players, stats, drafts, and transactions. It cannot change lineups, add/drop,
 claim waivers, or respond to trades. For NBA 9-category head-to-head leagues it adds
 schedule counts, recent-form projections, a 10k-run Monte Carlo matchup simulator, and

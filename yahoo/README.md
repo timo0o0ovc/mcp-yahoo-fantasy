@@ -2,7 +2,7 @@
 
 An MCP server for Yahoo Fantasy Sports. It wraps
 [`yahoo_fantasy_api`](https://github.com/spilchen/yahoo_fantasy_api) and exposes its reads
-and writes as MCP tools, working across NFL, NHL, NBA, and MLB.
+and writes as MCP tools, for NBA leagues only (Yahoo game code `nba`).
 
 ## How it works
 

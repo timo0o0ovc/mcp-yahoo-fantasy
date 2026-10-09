@@ -146,3 +146,16 @@ def test_client_uses_proxies():
     src = (SRC / "client.py").read_text()
     assert "ReadOnlyTeam(" in src and "ReadOnlyLeague(" in src and "lock_yhandler()" in src
     assert readonly.ReadOnlyViolation is ReadOnlyViolation
+
+
+def test_server_is_nba_only():
+    import inspect
+
+    import yahoo.client as c
+    from yahoo.server import list_leagues
+
+    assert c.NBA_GAME_CODE == "nba"
+    assert "game_code" not in inspect.signature(list_leagues).parameters
+    for other in ("nfl", "nhl", "mlb"):
+        with pytest.raises(ValueError):
+            c.YahooClient().game(other)
